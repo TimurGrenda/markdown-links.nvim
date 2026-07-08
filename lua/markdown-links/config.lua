@@ -58,14 +58,31 @@ function M.resolve_open_mode(raw_mode)
   return M.VALID_OPEN_MODES[mode] and mode or "edit"
 end
 
+--- List configured vault paths that are not existing directories.
+--- Existence is deliberately NOT checked at setup() — a missing dir (e.g. an
+--- unmounted drive) must not block startup. Callers check lazily: init.lua
+--- warns on first use, health.lua reports via :checkhealth.
+--- @param vault_paths string[] Normalized vault paths
+--- @return string[] missing Paths that do not exist as directories
+function M.missing_vaults(vault_paths)
+  local missing = {}
+  for _, p in ipairs(vault_paths) do
+    if vim.fn.isdirectory(p) ~= 1 then
+      table.insert(missing, p)
+    end
+  end
+  return missing
+end
+
 --- Validate and normalize configuration.
 --- Expands paths, converts string vault_path to array, validates open_mode whitelist.
+--- Does not check that vault paths exist (see missing_vaults).
 --- @param opts table Raw user configuration (merged with defaults)
 --- @return table Validated and normalized configuration
 function M.validate(opts)
   local result = {}
 
-  -- vault_path: normalize string to array, expand and check directories exist
+  -- vault_path: normalize string to array, expand paths
   local vp = opts.vault_path
   if type(vp) == "string" then
     result.vault_path = { vp }
@@ -77,11 +94,7 @@ function M.validate(opts)
 
   local expanded_paths = {}
   for i, p in ipairs(result.vault_path) do
-    local expanded = vim.fs.normalize(p)
-    if vim.fn.isdirectory(expanded) ~= 1 then
-      error(string.format("markdown-links: vault_path[%d] '%s' does not exist or is not a directory", i, expanded), 2)
-    end
-    expanded_paths[i] = expanded
+    expanded_paths[i] = vim.fs.normalize(p)
   end
   result.vault_path = expanded_paths
 

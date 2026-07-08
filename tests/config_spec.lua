@@ -108,13 +108,21 @@ describe("config", function()
         assert.matches("^" .. home:gsub("%-", "%%-"), result.vault_path[1])
       end)
 
-      it("should reject vault_path that does not exist as directory", function()
+      it("should accept vault_path that does not exist (existence checked lazily)", function()
         vim.fn.isdirectory = function(_)
           return 0
         end
-        local ok, err = pcall(config.validate, { vault_path = "/nonexistent/path" })
-        assert.is_false(ok)
-        assert.matches("does not exist or is not a directory", err)
+        local result = config.validate({ vault_path = "/nonexistent/path" })
+        assert.equal(1, #result.vault_path)
+        assert.equal("/nonexistent/path", result.vault_path[1])
+      end)
+
+      it("missing_vaults should list nonexistent directories", function()
+        vim.fn.isdirectory = function(path)
+          return path == "/exists" and 1 or 0
+        end
+        local missing = config.missing_vaults({ "/exists", "/gone" })
+        assert.same({ "/gone" }, missing)
       end)
 
       it("should accept empty vault_path table", function()
@@ -381,6 +389,29 @@ describe("init", function()
       local notif = helpers.get_last_notification()
       assert.is_not_nil(notif)
       assert.matches("setup", notif.msg)
+    end)
+
+    it("should warn once about missing vault dirs on first use, not at setup", function()
+      vim.fn.isdirectory = function(_)
+        return 0
+      end
+      local notifications = {}
+      vim.notify = function(msg, _)
+        table.insert(notifications, msg)
+      end
+
+      ml.setup({ vault_path = "/gone" })
+      assert.equal(0, #notifications)
+
+      ml.follow_link()
+      ml.follow_link()
+      local warn_count = 0
+      for _, msg in ipairs(notifications) do
+        if msg:match("vault_path does not exist") then
+          warn_count = warn_count + 1
+        end
+      end
+      assert.equal(1, warn_count)
     end)
   end)
 

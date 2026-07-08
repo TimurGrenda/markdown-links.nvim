@@ -73,7 +73,8 @@ require("markdown-links").setup({
 ```lua
 require("markdown-links").setup({
   -- Path to your note vault. String or list of strings.
-  -- Paths are expanded and validated on setup.
+  -- Paths are expanded on setup. Existence is not checked at startup —
+  -- a missing directory produces a one-time warning on first use.
   vault_path = {},
 
   -- How to open files when following links.
@@ -149,6 +150,15 @@ When you run `:MLFollowLink`, the plugin:
 4. Extracts the ID from the URL
 5. Searches the vault for a file with a matching `id:` in its frontmatter
 6. Opens the file (or shows a picker if multiple files match)
+
+## Troubleshooting
+
+Run `:checkhealth markdown-links` to verify your setup. It checks that
+`fd`/`fdfind` and `rg` are in `PATH`, that `setup()` was called, and that
+every configured `vault_path` exists.
+
+A `vault_path` pointing to a missing directory (e.g. an unmounted drive)
+does not block startup; the plugin warns once when you first use it.
 
 ## Oil.nvim integration
 

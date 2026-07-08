@@ -19,7 +19,34 @@ local state = {
   has_telescope = false,
   --- @type boolean Whether setup() has been called
   is_setup = false,
+  --- @type boolean Whether missing vault dirs were already warned about
+  vaults_checked = false,
 }
+
+--- Guard for public entry points: requires setup(), and warns once per
+--- setup() about configured vault paths that don't exist. Missing vaults
+--- don't block usage — the remaining ones still work, and
+--- :checkhealth markdown-links shows details.
+--- @return boolean ready True if the plugin is usable
+local function ensure_ready()
+  if not state.is_setup then
+    vim.notify("markdown-links: setup() must be called before using the plugin", vim.log.levels.ERROR)
+    return false
+  end
+  if not state.vaults_checked then
+    state.vaults_checked = true
+    local missing = config.missing_vaults(state.config.vault_path)
+    if #missing > 0 then
+      vim.notify(
+        "markdown-links: vault_path does not exist or is not a directory: "
+          .. table.concat(missing, ", ")
+          .. " (see :checkhealth markdown-links)",
+        vim.log.levels.WARN
+      )
+    end
+  end
+  return true
+end
 
 --- Set up vault-scoped keymaps via BufEnter autocommand.
 --- Only creates autocommand if at least one keymap is configured.
@@ -113,9 +140,10 @@ function M.setup(opts)
   local has_telescope, _ = pcall(require, "telescope")
   state.has_telescope = has_telescope
 
-  -- Store validated config
+  -- Store validated config; re-arm the deferred vault existence warning
   state.config = validated
   state.is_setup = true
+  state.vaults_checked = false
 
   -- Set up vault-scoped keymaps
   setup_keymaps(validated)
@@ -147,8 +175,7 @@ end
 --- Opens a picker to select a note and inserts a markdown link.
 --- @param from_range boolean|nil True when invoked from a visual-mode range command
 function M.insert_link(from_range)
-  if not state.is_setup then
-    vim.notify("markdown-links: setup() must be called before using the plugin", vim.log.levels.ERROR)
+  if not ensure_ready() then
     return
   end
   insert.insert_link(state.config, search, state.has_telescope, from_range)
@@ -157,8 +184,7 @@ end
 --- Follow the link under the cursor.
 --- Finds markdown links at cursor position, extracts ID, and opens matching file.
 function M.follow_link()
-  if not state.is_setup then
-    vim.notify("markdown-links: setup() must be called before using the plugin", vim.log.levels.ERROR)
+  if not ensure_ready() then
     return
   end
   follow.follow_link(state.config, search)
@@ -168,8 +194,7 @@ end
 --- Prompts user for a filename, generates slug and ID, creates the file.
 --- @param path string|nil Optional absolute path for the target directory
 function M.new_file(path)
-  if not state.is_setup then
-    vim.notify("markdown-links: setup() must be called before using the plugin", vim.log.levels.ERROR)
+  if not ensure_ready() then
     return
   end
   new_file_mod.new_file(state.config, search, path)
@@ -182,8 +207,7 @@ end
 ---   3. Frontmatter with valid id → skips, notifies user
 --- Changes are made in-buffer (undoable with `u`), not written to disk.
 function M.add_frontmatter()
-  if not state.is_setup then
-    vim.notify("markdown-links: setup() must be called before using the plugin", vim.log.levels.ERROR)
+  if not ensure_ready() then
     return
   end
 
